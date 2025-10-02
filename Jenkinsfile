@@ -3,6 +3,8 @@ pipeline {
   environment {
     IMAGE = "nikhilpesala/expense-tracker"
     TAG = "${env.BUILD_NUMBER}"
+    NETWORK = "expense-net"
+    DB_CONTAINER = "postgres"
   }
   stages {
     stage('Checkout') {
@@ -13,6 +15,7 @@ pipeline {
 
     stage('Build') {
       steps {
+        // Single line docker build works cross-platform
         sh "docker build -t ${IMAGE}:${TAG} ."
       }
     }
@@ -41,11 +44,14 @@ pipeline {
 
     stage('Deploy') {
       steps {
+        // Use a single line for PowerShell compatibility
         sh """
+          docker network create ${NETWORK} || true
+          docker rm -f ${DB_CONTAINER} || true
+          docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5432:5432 postgres:15
+          
           docker rm -f expense-tracker || true
-          docker run -d --name expense-tracker -p 8080:8080 \
-            -e DATABASE_URL='postgresql://postgres:postgres@postgres:5432/expenses' \
-            ${IMAGE}:latest
+          docker run -d --name expense-tracker --network ${NETWORK} -p 8083:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
         """
       }
     }
