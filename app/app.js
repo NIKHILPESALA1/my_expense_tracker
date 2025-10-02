@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const routes = require('./routes');
+const expensesRoutes = require('./routes/expenses');  // ✅ point to expenses.js
 const { register } = require('./metrics');
 const { init } = require('./db');
 
@@ -17,7 +17,7 @@ app.get('/metrics', async (req, res) => {
 });
 
 // API
-app.use('/', routes);
+app.use('/expenses', expensesRoutes);  // ✅ mount under /expenses
 
 // start server after DB initialized
 const port = process.env.PORT || 8080;
