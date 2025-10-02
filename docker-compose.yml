@@ -2,7 +2,6 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15
-    container_name: expense_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -14,7 +13,6 @@ services:
 
   expense-app:
     build: .
-    container_name: expense_app
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/expenses
       PORT: 8080
@@ -24,7 +22,6 @@ services:
       - "8080:8080"
     restart: unless-stopped
 
-  # Optional: node-exporter (if you want to monitor container/host)
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node_exporter
