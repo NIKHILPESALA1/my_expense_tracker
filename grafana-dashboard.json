@@ -1,0 +1,21 @@
+{
+  "title": "Expense Tracker Dashboard",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Expenses Created",
+      "targets": [
+        { "expr": "expenses_created_total" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Request Duration",
+      "targets": [
+        { "expr": "rate(http_request_duration_seconds_sum[1m]) / rate(http_request_duration_seconds_count[1m])" }
+      ]
+    }
+  ],
+  "schemaVersion": 36,
+  "version": 1
+}
