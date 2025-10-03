@@ -4,11 +4,8 @@ pipeline {
         IMAGE = "nikhilpesala/expense-tracker"
         TAG = "${env.BUILD_NUMBER}"
         NETWORK = "expense-net"
-        DB_CONTAINER = "expense-tracker-postgres"
-        APP_CONTAINER = "expense-tracker-expense-app"
-        NODE_EXPORTER_CONTAINER = "expense-tracker-node-exporter"
-        PROMETHEUS_CONTAINER = "expense-tracker-prometheus"
-        GRAFANA_CONTAINER = "expense-tracker-grafana"
+        DB_CONTAINER = "postgres"
+        APP_CONTAINER = "expense-tracker"
     }
     stages {
         stage('Checkout') {
@@ -45,30 +42,46 @@ pipeline {
             }
         }
 
-       stage('Deploy') {
-  steps {
-    sh """
-      docker network create ${NETWORK} || true
+        stage('Deploy') {
+            steps {
+                sh """
+                    docker network create ${NETWORK} || true
 
-      # Remove old containers if they exist
-      docker rm -f ${DB_CONTAINER} || true
-      docker rm -f expense-tracker || true
+                    # Remove old containers if they exist
+                    docker rm -f ${DB_CONTAINER} || true
+                    docker rm -f ${APP_CONTAINER} || true
+                    docker rm -f prometheus || true
+                    docker rm -f grafana || true
+                    docker rm -f node-exporter || true
 
-      # Run Postgres container on host port 5433
-      docker run -d --name ${DB_CONTAINER} --network ${NETWORK} \
-        -e POSTGRES_USER=postgres \
-        -e POSTGRES_PASSWORD=postgres \
-        -e POSTGRES_DB=expenses \
-        -p 5433:5432 postgres:15
+                    # Run Postgres on host port 5433 to avoid conflict
+                    docker run -d --name ${DB_CONTAINER} --network ${NETWORK} \
+                        -e POSTGRES_USER=postgres \
+                        -e POSTGRES_PASSWORD=postgres \
+                        -e POSTGRES_DB=expenses \
+                        -p 5433:5432 postgres:15
 
-      # Run expense app container
-      docker run -d --name expense-tracker --network ${NETWORK} \
-        -p 8085:8080 \
-        -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' \
-        ${IMAGE}:latest
-    """
-  }
-}
+                    # Run expense app
+                    docker run -d --name ${APP_CONTAINER} --network ${NETWORK} \
+                        -p 8085:8080 \
+                        -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' \
+                        ${IMAGE}:latest
 
+                    # Run Prometheus
+                    docker run -d --name prometheus --network ${NETWORK} \
+                        -p 9090:9090 \
+                        -v $PWD/prometheus.yml:/etc/prometheus/prometheus.yml \
+                        prom/prometheus
+
+                    # Run Grafana
+                    docker run -d --name grafana --network ${NETWORK} \
+                        -p 3000:3000 grafana/grafana
+
+                    # Run Node Exporter
+                    docker run -d --name node-exporter --network ${NETWORK} \
+                        -p 9101:9100 prom/node-exporter:latest
+                """
+            }
+        }
     }
 }
