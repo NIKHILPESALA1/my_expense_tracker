@@ -5,25 +5,17 @@ pipeline {
     TAG = "${env.BUILD_NUMBER}"
     NETWORK = "expense-net"
     DB_CONTAINER = "postgres"
+    APP_CONTAINER = "expense-tracker-expense-app"
+    PROM_CONTAINER = "prometheus"
+    GRAF_CONTAINER = "grafana"
   }
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     stage('Build') {
-      steps {
-        // Single line docker build works cross-platform
-        sh "docker build -t ${IMAGE}:${TAG} ."
-      }
-    }
-
-    stage('Test') {
-      steps {
-        sh "echo 'No tests yet, add later!'"
-      }
+      steps { sh "docker build -t ${IMAGE}:${TAG} ." }
     }
 
     stage('Login to DockerHub') {
@@ -44,14 +36,23 @@ pipeline {
 
     stage('Deploy') {
       steps {
-        // Use a single line for PowerShell compatibility
         sh """
           docker network create ${NETWORK} || true
-          docker rm -f ${DB_CONTAINER} || true
-          docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5432:5432 postgres:15
           
-          docker rm -f expense-tracker || true
-          docker run -d --name expense-tracker --network ${NETWORK} -p 8083:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
+          # Remove old containers if they exist
+          docker rm -f ${DB_CONTAINER} ${APP_CONTAINER} ${PROM_CONTAINER} ${GRAF_CONTAINER} || true
+
+          # Run Postgres
+          docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5432:5432 postgres:15
+
+          # Run Expense Tracker App
+          docker run -d --name ${APP_CONTAINER} --network ${NETWORK} -p 8085:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
+
+          # Run Prometheus
+          docker run -d --name ${PROM_CONTAINER} --network ${NETWORK} -p 9090:9090 -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+
+          # Run Grafana
+          docker run -d --name ${GRAF_CONTAINER} --network ${NETWORK} -p 3000:3000 grafana/grafana
         """
       }
     }

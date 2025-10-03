@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   postgres:
     image: postgres:15
@@ -19,13 +20,32 @@ services:
     depends_on:
       - postgres
     ports:
-      - "8085:8080"
+      - "8085:8080"  # maps host 8085 to container 8080
     restart: unless-stopped
 
   node-exporter:
     image: prom/node-exporter:latest
     ports:
-      - "9101:9100"   # changed host port to avoid conflict
+      - "9101:9100"  # host 9101 → container 9100
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - expense-app
+      - node-exporter
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
     restart: unless-stopped
 
 volumes:
