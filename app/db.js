@@ -1,17 +1,22 @@
 const { Pool } = require('pg');
 
-// Use DATABASE_URL if available, else fallback
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/expenses',
+  connectionString: process.env.DATABASE_URL,
 });
 
-// Simple init to test DB
 async function init() {
   try {
-    await pool.query('SELECT NOW()'); // test connection
-    console.log('✅ Database connected successfully');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        amount NUMERIC(10,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Database initialized');
   } catch (err) {
-    console.error('❌ Failed to connect to DB:', err);
+    console.error('❌ Failed to init DB', err);
     throw err;
   }
 }

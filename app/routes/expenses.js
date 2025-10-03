@@ -1,96 +1,29 @@
 const express = require('express');
-const router = express.Router();
-const { pool } = require('../db');
+const bodyParser = require('body-parser');
+const expensesRoutes = require('./routes/expenses');  // ✅ import explicitly
+const { register } = require('./metrics');
+const { init } = require('./db');
 
-// --- CREATE ---
-router.post('/', async (req, res) => {
-  try {
-    const { description, amount } = req.body;
-    if (!description || !amount) {
-      return res.status(400).json({ error: 'description and amount are required' });
-    }
+const app = express();
+app.use(bodyParser.json());
 
-    const result = await pool.query(
-      'INSERT INTO expenses (description, amount) VALUES ($1, $2) RETURNING *',
-      [description, amount]
-    );
+// health
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error('Error creating expense:', err);
-    res.status(500).json({ error: 'Failed to create expense' });
-  }
+// metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
 });
 
-// --- READ ALL ---
-router.get('/', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM expenses ORDER BY id ASC');
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching expenses:', err);
-    res.status(500).json({ error: 'Failed to fetch expenses' });
-  }
+// API routes
+app.use('/expenses', expensesRoutes);  // ✅ mount under /expenses
+
+// start server after DB initialized
+const port = process.env.PORT || 8080;
+init().then(() => {
+  app.listen(port, () => console.log(`Expense app listening on ${port}`));
+}).catch(err => {
+  console.error('Failed to init DB', err);
+  process.exit(1);
 });
-
-// --- READ ONE ---
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query('SELECT * FROM expenses WHERE id = $1', [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Expense not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error fetching expense:', err);
-    res.status(500).json({ error: 'Failed to fetch expense' });
-  }
-});
-
-// --- UPDATE ---
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { description, amount } = req.body;
-
-    const result = await pool.query(
-      'UPDATE expenses SET description = $1, amount = $2 WHERE id = $3 RETURNING *',
-      [description, amount, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Expense not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error updating expense:', err);
-    res.status(500).json({ error: 'Failed to update expense' });
-  }
-});
-
-// --- DELETE ---
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      'DELETE FROM expenses WHERE id = $1 RETURNING *',
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Expense not found' });
-    }
-
-    res.json({ message: 'Expense deleted successfully', deleted: result.rows[0] });
-  } catch (err) {
-    console.error('Error deleting expense:', err);
-    res.status(500).json({ error: 'Failed to delete expense' });
-  }
-});
-
-module.exports = router;

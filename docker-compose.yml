@@ -24,9 +24,8 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
-    container_name: node_exporter
     ports:
-      - "9100:9100"
+      - "9101:9100"   # changed host port to avoid conflict
     restart: unless-stopped
 
 volumes:

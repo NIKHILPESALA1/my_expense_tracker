@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const expensesRoutes = require('./routes/expenses');  // ✅ point to expenses.js
+const expensesRoutes = require('./routes/expenses');  // explicit
 const { register } = require('./metrics');
 const { init } = require('./db');
 
@@ -17,7 +17,12 @@ app.get('/metrics', async (req, res) => {
 });
 
 // API
-app.use('/expenses', expensesRoutes);  // ✅ mount under /expenses
+app.use('/expenses', expensesRoutes);
+
+// fallback 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
 
 // start server after DB initialized
 const port = process.env.PORT || 8080;
@@ -27,3 +32,5 @@ init().then(() => {
   console.error('Failed to init DB', err);
   process.exit(1);
 });
+
+module.exports = app;
