@@ -45,33 +45,30 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
-            steps {
-                sh """
-                    # Create network if it doesn't exist
-                    docker network create ${NETWORK} || true
+       stage('Deploy') {
+  steps {
+    sh """
+      docker network create ${NETWORK} || true
 
-                    # ---- Postgres ----
-                    docker rm -f ${DB_CONTAINER} || true
-                    docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5435:5432 postgres:15
+      # Remove old containers if they exist
+      docker rm -f ${DB_CONTAINER} || true
+      docker rm -f expense-tracker || true
 
-                    # ---- Expense App ----
-                    docker rm -f ${APP_CONTAINER} || true
-                    docker run -d --name ${APP_CONTAINER} --network ${NETWORK} -p 8085:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
+      # Run Postgres container on host port 5433
+      docker run -d --name ${DB_CONTAINER} --network ${NETWORK} \
+        -e POSTGRES_USER=postgres \
+        -e POSTGRES_PASSWORD=postgres \
+        -e POSTGRES_DB=expenses \
+        -p 5433:5432 postgres:15
 
-                    # ---- Node Exporter ----
-                    docker rm -f ${NODE_EXPORTER_CONTAINER} || true
-                    docker run -d --name ${NODE_EXPORTER_CONTAINER} -p 9101:9100 prom/node-exporter:latest
+      # Run expense app container
+      docker run -d --name expense-tracker --network ${NETWORK} \
+        -p 8085:8080 \
+        -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' \
+        ${IMAGE}:latest
+    """
+  }
+}
 
-                    # ---- Prometheus ----
-                    docker rm -f ${PROMETHEUS_CONTAINER} || true
-                    docker run -d --name ${PROMETHEUS_CONTAINER} --network ${NETWORK} -p 9090:9090 -v ${WORKSPACE}/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus:latest
-
-                    # ---- Grafana ----
-                    docker rm -f ${GRAFANA_CONTAINER} || true
-                    docker run -d --name ${GRAFANA_CONTAINER} --network ${NETWORK} -p 3000:3000 grafana/grafana
-                """
-            }
-        }
     }
 }
