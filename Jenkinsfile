@@ -4,9 +4,10 @@ pipeline {
         IMAGE = "nikhilpesala/expense-tracker"
         TAG = "${env.BUILD_NUMBER}"
         NETWORK = "expense-net"
-        DB_CONTAINER = "postgres"
-        APP_CONTAINER = "expense-tracker"
+        DB_CONTAINER = "expense-tracker-postgres"
+        APP_CONTAINER = "expense-tracker-app"
     }
+
     stages {
         stage('Checkout') {
             steps {
@@ -45,21 +46,21 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh """
+                    # Ensure network exists
                     docker network create ${NETWORK} || true
 
-                    # Remove old containers if they exist
-                    docker rm -f ${DB_CONTAINER} || true
-                    docker rm -f ${APP_CONTAINER} || true
-                    docker rm -f prometheus || true
-                    docker rm -f grafana || true
-                    docker rm -f node-exporter || true
+                    # Run Postgres only if not running
+                    if [ \$(docker ps -q -f name=${DB_CONTAINER}) = '' ]; then
+                        docker run -d --name ${DB_CONTAINER} --network ${NETWORK} \
+                            -e POSTGRES_USER=postgres \
+                            -e POSTGRES_PASSWORD=postgres \
+                            -e POSTGRES_DB=expenses \
+                            -v pgdata:/var/lib/postgresql/data \
+                            -p 5433:5432 postgres:15
+                    fi
 
-                    # Run Postgres on host port 5433 to avoid conflict
-                    docker run -d --name ${DB_CONTAINER} --network ${NETWORK} \
-                        -e POSTGRES_USER=postgres \
-                        -e POSTGRES_PASSWORD=postgres \
-                        -e POSTGRES_DB=expenses \
-                        -p 5433:5432 postgres:15
+                    # Remove old app container
+                    docker rm -f ${APP_CONTAINER} || true
 
                     # Run expense app
                     docker run -d --name ${APP_CONTAINER} --network ${NETWORK} \
@@ -67,17 +68,17 @@ pipeline {
                         -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' \
                         ${IMAGE}:latest
 
-                    # Run Prometheus
+                    # Restart monitoring stack
+                    docker rm -f prometheus grafana node-exporter || true
+
                     docker run -d --name prometheus --network ${NETWORK} \
                         -p 9090:9090 \
-                        -v $PWD/prometheus.yml:/etc/prometheus/prometheus.yml \
+                        -v ${WORKSPACE}/prometheus.yml:/etc/prometheus/prometheus.yml \
                         prom/prometheus
 
-                    # Run Grafana
                     docker run -d --name grafana --network ${NETWORK} \
                         -p 3000:3000 grafana/grafana
 
-                    # Run Node Exporter
                     docker run -d --name node-exporter --network ${NETWORK} \
                         -p 9101:9100 prom/node-exporter:latest
                 """
