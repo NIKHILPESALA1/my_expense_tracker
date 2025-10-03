@@ -4,7 +4,11 @@ pipeline {
         IMAGE = "nikhilpesala/expense-tracker"
         TAG = "${env.BUILD_NUMBER}"
         NETWORK = "expense-net"
-        DB_CONTAINER = "postgres"
+        DB_CONTAINER = "expense-tracker-postgres"
+        APP_CONTAINER = "expense-tracker-expense-app"
+        NODE_EXPORTER_CONTAINER = "expense-tracker-node-exporter"
+        PROMETHEUS_CONTAINER = "expense-tracker-prometheus"
+        GRAFANA_CONTAINER = "expense-tracker-grafana"
     }
     stages {
         stage('Checkout') {
@@ -44,28 +48,28 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh """
-                    # Create network
+                    # Create network if it doesn't exist
                     docker network create ${NETWORK} || true
 
-                    # PostgreSQL
+                    # ---- Postgres ----
                     docker rm -f ${DB_CONTAINER} || true
-                    docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5432:5432 postgres:15
+                    docker run -d --name ${DB_CONTAINER} --network ${NETWORK} -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=expenses -p 5435:5432 postgres:15
 
-                    # Expense app
-                    docker rm -f expense-tracker || true
-                    docker run -d --name expense-tracker --network ${NETWORK} -p 8085:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
+                    # ---- Expense App ----
+                    docker rm -f ${APP_CONTAINER} || true
+                    docker run -d --name ${APP_CONTAINER} --network ${NETWORK} -p 8085:8080 -e DATABASE_URL='postgresql://postgres:postgres@${DB_CONTAINER}:5432/expenses' ${IMAGE}:latest
 
-                    # Node exporter
-                    docker rm -f node-exporter || true
-                    docker run -d --name node-exporter --network ${NETWORK} -p 9101:9100 prom/node-exporter:latest
+                    # ---- Node Exporter ----
+                    docker rm -f ${NODE_EXPORTER_CONTAINER} || true
+                    docker run -d --name ${NODE_EXPORTER_CONTAINER} -p 9101:9100 prom/node-exporter:latest
 
-                    # Prometheus
-                    docker rm -f prometheus || true
-                    docker run -d --name prometheus --network ${NETWORK} -p 9090:9090 -v ${WORKSPACE}/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+                    # ---- Prometheus ----
+                    docker rm -f ${PROMETHEUS_CONTAINER} || true
+                    docker run -d --name ${PROMETHEUS_CONTAINER} --network ${NETWORK} -p 9090:9090 -v ${WORKSPACE}/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus:latest
 
-                    # Grafana
-                    docker rm -f grafana || true
-                    docker run -d --name grafana --network ${NETWORK} -p 3000:3000 grafana/grafana
+                    # ---- Grafana ----
+                    docker rm -f ${GRAFANA_CONTAINER} || true
+                    docker run -d --name ${GRAFANA_CONTAINER} --network ${NETWORK} -p 3000:3000 grafana/grafana
                 """
             }
         }
